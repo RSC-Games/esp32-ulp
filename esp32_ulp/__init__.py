@@ -50,7 +50,7 @@ def src_to_binary(src):
     # Check if binary is larger than max size.
     if len(ulp_bin) > image_sz:
         log_sys.log_e("esp32_ulp", "Image does not fit in allocated RTC_SLOW memory.")
-        log_sys.log_e("esp32_ulp", "Image overflowed by " + str(len(ulp_bin) - image_sz) + " B."))
+        log_sys.log_e("esp32_ulp", "Image overflowed by " + str(len(ulp_bin) - image_sz) + " B.")
         sys.exit(1)
     
     # Print out size information.
