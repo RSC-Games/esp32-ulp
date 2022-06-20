@@ -1,5 +1,6 @@
 DEBUG = False
 
+import log_sys
 import gc
 import os
 
@@ -11,7 +12,7 @@ def garbage_collect(msg, verbose=DEBUG):
     gc.collect()
     free_after = gc.mem_free()
     if verbose:
-        print("%s: %d --gc--> %d bytes free" % (msg, free_before, free_after))
+        log_sys.log_i("mem_free", "%s: %d --gc--> %d bytes free" % (msg, free_before, free_after))
 
 
 def split_tokens(line):
