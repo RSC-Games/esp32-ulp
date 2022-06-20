@@ -3,6 +3,8 @@ ESP32 ULP Co-Processor Assembler
 """
 
 import re
+import sys
+import log_sys
 from . import opcodes
 from .nocomment import remove_comments as do_remove_comments
 from .util import garbage_collect
@@ -30,7 +32,8 @@ class SymbolTable:
     def set_sym(self, symbol, stype, section, value):
         entry = (stype, section, value)
         if symbol in self._symbols and entry != self._symbols[symbol]:
-            raise Exception('redefining symbol %s with different value %r -> %r.' % (symbol, self._symbols[symbol], entry))
+            log_sys.log_e("ulp_asm", "Redefining symbol %s with different value %r -> %r." % (symbol, self._symbols[symbol], entry))
+            sys.exit(1)
         self._symbols[symbol] = entry
 
     def has_sym(self, symbol):
@@ -138,10 +141,12 @@ class Assembler:
     def append_section(self, value, expected_section=None):
         s = self.section
         if expected_section is not None and s is not expected_section:
-            raise TypeError('only allowed in %s section' % expected_section)
+            log_sys.log_e("ulp_asm", "Only allowed in %s section" % expected_section)
+            sys.exit(1)
         if s is BSS:
             if int.from_bytes(value, 'little') != 0:
-                raise ValueError('attempt to store non-zero value in section .bss')
+                log_sys.log_e("ulp_asm", "Attempted to store non-zero value in section .bss")
+                sys.exit(1)
             # just increase BSS size by length of value
             self.offsets[s] += len(value)
         else:
@@ -200,9 +205,11 @@ class Assembler:
 
     def fill(self, section, amount, fill_byte):
         if fill_byte is not None and section is BSS:
-            raise ValueError('fill in bss section not allowed')
+            log_sys.log_e("ulp_asm", "Fill in bss section not allowed.")
+            sys.exit(1)
         if section is TEXT:  # TODO: text section should be filled with NOPs
-            raise ValueError('fill/skip/align in text section not supported')
+            log_sys.log_e("ulp_asm", "fill/skip/align in text section not supported.")
+            sys.exit(1)
         fill = int(fill_byte or 0).to_bytes(1, 'little') * amount
         self.offsets[section] += len(fill)
         if section is not BSS:
@@ -280,7 +287,8 @@ class Assembler:
                         for instruction in result:
                             self.append_section(instruction.to_bytes(4, 'little'), TEXT)
                         continue
-                raise ValueError('Unknown opcode or directive: %s' % opcode)
+                log_sys.log_e("ulp_asm", "Unknown opcode or directive: %s" % opcode)
+                sys.exit(1)
         self.finalize_sections()
 
     def assemble(self, text, remove_comments=True):
