@@ -48,7 +48,7 @@ def src_to_binary(src):
     ulp_bin = make_binary(text, data, bss_len)
     
     # Print out size information.
-    log_sys.log_i("esp32_ulp", "Image size is " + str(len(ulp_bin)) + " B (" + str(len(ulp_bin) // image_sz) + "%).")
+    log_sys.log_i("esp32_ulp", "Image size is " + str(len(ulp_bin)) + " B (" + str(int((len(ulp_bin) / image_sz) * 100)) + "%).")
     log_sys.log_i("esp32_ulp", "Max size is " + str(image_sz) + " B.")
     
     # Return the linked file.
