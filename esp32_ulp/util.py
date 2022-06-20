@@ -6,6 +6,9 @@ import os
 
 NORMAL, WHITESPACE = 0, 1
 
+# Last_line field enhances debug by storing the line text.
+last_line = ""
+
 
 def garbage_collect(msg, verbose=DEBUG):
     free_before = gc.mem_free()
