@@ -1,4 +1,5 @@
 import sys
+import log_sys
 
 from .preprocess import Preprocessor
 from .definesdb import DefinesDB
@@ -11,11 +12,11 @@ def parse(files):
     p.use_db(db)
 
     for f in files:
-        print('Processing file:', f)
+        log_sys.log_i("ulp_pp", "Processing file: " + f)
 
         p.process_include_file(f)
 
-    print('Done.')
+    log_sys.log_i("ulp_pp", "Preprocessing finished.")
 
 
 if __name__ == '__main__':
