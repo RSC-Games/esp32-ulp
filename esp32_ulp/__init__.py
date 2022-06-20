@@ -47,6 +47,12 @@ def src_to_binary(src):
     # Link the ASM object into a binary file.
     ulp_bin = make_binary(text, data, bss_len)
     
+    # Check if binary is larger than max size.
+    if len(ulp_bin) > image_sz:
+        log_sys.log_e("esp32_ulp", "Image does not fit in allocated RTC_SLOW memory.")
+        log_sys.log_e("esp32_ulp", "Image overflowed by " + str(len(ulp_bin) - image_sz) + " B."))
+        sys.exit(1)
+    
     # Print out size information.
     log_sys.log_i("esp32_ulp", "Image size is " + str(len(ulp_bin)) + " B (" + str(int((len(ulp_bin) / image_sz) * 100)) + "%).")
     log_sys.log_i("esp32_ulp", "Max size is " + str(image_sz) + " B.")
