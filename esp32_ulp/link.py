@@ -12,8 +12,10 @@ from uctypes import struct, addressof, LITTLE_ENDIAN, UINT16, UINT32
 def make_binary(text, data, bss_size):
     if not isinstance(text, bytes):
         log_sys.log_e("ulp_ld", "Invalid .text region: .text section must be binary bytes.")
+        sys.exit(1)
     if not isinstance(data, bytes):
         log_sys.log_e("ulp_ld", "Invalid .data region: .data section must be binary bytes.")
+        sys.exit(1)
     binary_header_struct_def = dict(
         magic = 0 | UINT32,
         text_offset = 4 | UINT16,
