@@ -2,6 +2,8 @@
 ESP32 ULP Co-Processor Instructions
 """
 
+import sys
+import log_sys
 from ucollections import namedtuple
 from uctypes import struct, addressof, LITTLE_ENDIAN, UINT32, BFUINT32, BF_POS, BF_LEN
 
@@ -281,7 +283,8 @@ def eval_arg(arg):
             parts.append(token)
     parts = "".join(parts)
     if not validate_expression(parts):
-        raise ValueError('Unsupported expression: %s' % parts)
+        log_sys.log_e("ulp_asm", "Unsupported expression: %s" % parts)
+        sys.exit(1)
     return eval(parts)
 
 
@@ -300,7 +303,8 @@ def arg_qualify(arg):
             reg = int(arg[1])
             if 0 <= reg <= 3:
                 return ARG(REG, reg, arg)
-            raise ValueError('arg_qualify: valid registers are r0, r1, r2, r3. Given: %s' % arg)
+            log_sys.log_e("arg_qualify", "valid registers are r0, r1, r2, r3. Given: %s" % arg)
+            sys.exit(1)
         if arg_lower in ['--', 'eq', 'ov', 'lt', 'gt', 'ge', 'le']:
             return ARG(COND, arg_lower, arg)
     try:
@@ -320,7 +324,8 @@ def get_reg(arg):
         arg = arg_qualify(arg)
     if arg.type == REG:
         return arg.value
-    raise TypeError('wanted: register, got: %s' % arg.raw)
+    log_sys.log_e("ulp_asm", "Expected: register, got: %s" % arg.raw)
+    sys.exit(1)
 
 
 def get_imm(arg):
@@ -330,7 +335,8 @@ def get_imm(arg):
         return arg.value
     if arg.type == SYM:
         return symbols.resolve_absolute(arg.value)
-    raise TypeError('wanted: immediate, got: %s' % arg.raw)
+    log_sys.log_e("ulp_asm", "Expected: immediate, got: %s" % arg.raw)
+    sys.exit(1)
 
 
 get_abs = get_imm
@@ -341,11 +347,13 @@ def get_rel(arg):
         arg = arg_qualify(arg)
     if arg.type == IMM:
         if arg.value & 3 != 0:  # bitwise version of: arg.value % 4 != 0
-            raise ValueError('Relative offset must be a multiple of 4')
+            log_sys.log_e("ulp_asm", "Relative offset must be a multiple of 4")
+            sys.exit(1)
         return IMM, arg.value >> 2  # bitwise version of: arg.value // 4
     if arg.type == SYM:
         return SYM, symbols.resolve_relative(arg.value)
-    raise TypeError('wanted: immediate, got: %s' % arg.raw)
+    log_sys.log_e("ulp_asm", "Expected: immediate, got: %s" % arg.raw)
+    sys.exit(1)
 
 
 def get_cond(arg):
@@ -353,13 +361,15 @@ def get_cond(arg):
         arg = arg_qualify(arg)
     if arg.type == COND:
         return arg.value
-    raise TypeError('wanted: condition, got: %s' % arg.raw)
+    log_sys.log_e("ulp_asm", "Expected: condition, got: %s" % arg.raw)
+    sys.exit(1)
 
 
 def _soc_reg_to_ulp_periph_sel(reg):
     # Map SoC peripheral register to periph_sel field of RD_REG and WR_REG instructions.
     if reg < DR_REG_RTCCNTL_BASE:
-        raise ValueError("invalid register base")
+        log_sys.log_e("ulp_asm", "Invalid register base.")
+        sys.exit(1)
     elif reg < DR_REG_RTCIO_BASE:
         ret = RD_REG_PERIPH_RTC_CNTL
     elif reg < DR_REG_SENS_BASE:
@@ -369,7 +379,8 @@ def _soc_reg_to_ulp_periph_sel(reg):
     elif reg < DR_REG_IO_MUX_BASE:
         ret = RD_REG_PERIPH_RTC_I2C
     else:
-        raise ValueError("invalid register base")
+        log_sys.log_e("ulp_asm", "Invalid register base.")
+        sys.exit(1)
     return ret
 
 
@@ -509,7 +520,8 @@ def i_move(reg_dest, reg_imm_src):
         _alu_imm.sub_opcode = SUB_OPCODE_ALU_IMM
         _alu_imm.opcode = OPCODE_ALU
         return _alu_imm.all
-    raise TypeError('unsupported operand: %s' % src.raw)
+    log_sys.log_e("ulp_asm", "Unsupported operand: %s" % src.raw)
+    sys.exit(1)
 
 
 def _alu3(reg_dest, reg_src1, reg_imm_src2, alu_sel):
@@ -537,7 +549,8 @@ def _alu3(reg_dest, reg_src1, reg_imm_src2, alu_sel):
         _alu_imm.sub_opcode = SUB_OPCODE_ALU_IMM
         _alu_imm.opcode = OPCODE_ALU
         return _alu_imm.all
-    raise TypeError('unsupported operand: %s' % src2.raw)
+    log_sys.log_e("ulp_asm", "Unsupported operand: %s" % src2.raw)
+    sys.exit(1)
 
 
 def i_add(reg_dest, reg_src1, reg_imm_src2):
@@ -616,7 +629,8 @@ def i_jump(target, condition='--'):
     elif condition == '--':  # means unconditional
         jump_type = BX_JUMP_TYPE_DIRECT
     else:
-        raise ValueError("invalid flags condition")
+        log_sys.log_e("ulp_asm", "Invalid flags condition: " + condition)
+        sys.exit(1)
     if target.type == IMM or target.type == SYM:
         _bx.dreg = 0
         # we track label addresses in 32bit words, but immediate values are in bytes and need to get divided by 4.
@@ -636,7 +650,8 @@ def i_jump(target, condition='--'):
         _bx.sub_opcode = SUB_OPCODE_BX
         _bx.opcode = OPCODE_BRANCH
         return _bx.all
-    raise TypeError('unsupported operand: %s' % target.raw)
+    log_sys.log_e("ulp_asm", "Unsupported operand: %s" % target.raw)
+    sys.exit(1)
 
 
 def _jump_relr(threshold, cond, offset):
@@ -678,7 +693,8 @@ def i_jumpr(offset, threshold, condition):
         jump_ins = _jump_relr(threshold, BRCOND_GE, offset)
         return (skip_ins, jump_ins)
     else:
-        raise ValueError("invalid comparison condition")
+        log_sys.log_e("ulp_asm", "Invalid comparison condition: " + condition)
+        sys.exit(1)
     return _jump_relr(threshold, cmp_op, offset)
 
 
@@ -725,7 +741,8 @@ def i_jumps(offset, threshold, condition):
 
         return (skip_ins, jump_ins)
     else:
-        raise ValueError("invalid comparison condition")
+        log_sys.log_e("ulp_asm", "Invalid comparison condition: " + condition)
+        sys.exit(1)
     return _jump_rels(threshold, cmp_op, offset)
 
 
