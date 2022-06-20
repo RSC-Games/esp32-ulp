@@ -8,7 +8,7 @@ from ucollections import namedtuple
 from uctypes import struct, addressof, LITTLE_ENDIAN, UINT32, BFUINT32, BF_POS, BF_LEN
 
 from .soc import *
-from .util import split_tokens, validate_expression
+from .util import split_tokens, validate_expression, last_line
 
 # XXX dirty hack: use a global for the symbol table
 symbols = None
@@ -86,7 +86,9 @@ def make_ins_struct_def(layout):
         struct_def[name] = BFUINT32 | pos << BF_POS | width << BF_LEN
         pos += width
     if pos != 32:
-        raise ValueError('make_ins: bit field widths must sum up to 32. [%s]' % layout)
+        log_sys.log_e("make_ins", "bit field widths must sum up to 32. [%s]" % layout)
+        log_sys.log_i("ulp_asm", "Line: " + last_line)
+        sys.exit(1)
     struct_def['all'] = UINT32
     return struct_def
 
@@ -284,6 +286,7 @@ def eval_arg(arg):
     parts = "".join(parts)
     if not validate_expression(parts):
         log_sys.log_e("ulp_asm", "Unsupported expression: %s" % parts)
+        log_sys.log_i("ulp_asm", "Line: " + last_line)
         sys.exit(1)
     return eval(parts)
 
@@ -304,6 +307,7 @@ def arg_qualify(arg):
             if 0 <= reg <= 3:
                 return ARG(REG, reg, arg)
             log_sys.log_e("arg_qualify", "valid registers are r0, r1, r2, r3. Given: %s" % arg)
+            log_sys.log_i("ulp_asm", "Line: " + last_line)
             sys.exit(1)
         if arg_lower in ['--', 'eq', 'ov', 'lt', 'gt', 'ge', 'le']:
             return ARG(COND, arg_lower, arg)
@@ -325,6 +329,7 @@ def get_reg(arg):
     if arg.type == REG:
         return arg.value
     log_sys.log_e("ulp_asm", "Expected: register, got: %s" % arg.raw)
+    log_sys.log_i("ulp_asm", "Line: " + last_line)
     sys.exit(1)
 
 
@@ -336,6 +341,7 @@ def get_imm(arg):
     if arg.type == SYM:
         return symbols.resolve_absolute(arg.value)
     log_sys.log_e("ulp_asm", "Expected: immediate, got: %s" % arg.raw)
+    log_sys.log_i("ulp_asm", "Line: " + last_line)
     sys.exit(1)
 
 
@@ -348,11 +354,13 @@ def get_rel(arg):
     if arg.type == IMM:
         if arg.value & 3 != 0:  # bitwise version of: arg.value % 4 != 0
             log_sys.log_e("ulp_asm", "Relative offset must be a multiple of 4")
+            log_sys.log_i("ulp_asm", "Line: " + last_line)
             sys.exit(1)
         return IMM, arg.value >> 2  # bitwise version of: arg.value // 4
     if arg.type == SYM:
         return SYM, symbols.resolve_relative(arg.value)
     log_sys.log_e("ulp_asm", "Expected: immediate, got: %s" % arg.raw)
+    log_sys.log_i("ulp_asm", "Line: " + last_line)
     sys.exit(1)
 
 
@@ -362,6 +370,7 @@ def get_cond(arg):
     if arg.type == COND:
         return arg.value
     log_sys.log_e("ulp_asm", "Expected: condition, got: %s" % arg.raw)
+    log_sys.log_i("ulp_asm", "Line: " + last_line)
     sys.exit(1)
 
 
@@ -369,6 +378,7 @@ def _soc_reg_to_ulp_periph_sel(reg):
     # Map SoC peripheral register to periph_sel field of RD_REG and WR_REG instructions.
     if reg < DR_REG_RTCCNTL_BASE:
         log_sys.log_e("ulp_asm", "Invalid register base.")
+        log_sys.log_i("ulp_asm", "Line: " + last_line)
         sys.exit(1)
     elif reg < DR_REG_RTCIO_BASE:
         ret = RD_REG_PERIPH_RTC_CNTL
@@ -380,6 +390,7 @@ def _soc_reg_to_ulp_periph_sel(reg):
         ret = RD_REG_PERIPH_RTC_I2C
     else:
         log_sys.log_e("ulp_asm", "Invalid register base.")
+        log_sys.log_i("ulp_asm", "Line: " + last_line)
         sys.exit(1)
     return ret
 
@@ -521,6 +532,7 @@ def i_move(reg_dest, reg_imm_src):
         _alu_imm.opcode = OPCODE_ALU
         return _alu_imm.all
     log_sys.log_e("ulp_asm", "Unsupported operand: %s" % src.raw)
+    log_sys.log_i("ulp_asm", "Line: " + last_line)
     sys.exit(1)
 
 
@@ -550,6 +562,7 @@ def _alu3(reg_dest, reg_src1, reg_imm_src2, alu_sel):
         _alu_imm.opcode = OPCODE_ALU
         return _alu_imm.all
     log_sys.log_e("ulp_asm", "Unsupported operand: %s" % src2.raw)
+    log_sys.log_i("ulp_asm", "Line: " + last_line)
     sys.exit(1)
 
 
@@ -630,6 +643,7 @@ def i_jump(target, condition='--'):
         jump_type = BX_JUMP_TYPE_DIRECT
     else:
         log_sys.log_e("ulp_asm", "Invalid flags condition: " + condition)
+        log_sys.log_i("ulp_asm", "Line: " + last_line)
         sys.exit(1)
     if target.type == IMM or target.type == SYM:
         _bx.dreg = 0
@@ -651,6 +665,7 @@ def i_jump(target, condition='--'):
         _bx.opcode = OPCODE_BRANCH
         return _bx.all
     log_sys.log_e("ulp_asm", "Unsupported operand: %s" % target.raw)
+    log_sys.log_i("ulp_asm", "Line: " + last_line)
     sys.exit(1)
 
 
@@ -694,6 +709,7 @@ def i_jumpr(offset, threshold, condition):
         return (skip_ins, jump_ins)
     else:
         log_sys.log_e("ulp_asm", "Invalid comparison condition: " + condition)
+        log_sys.log_i("ulp_asm", "Line: " + last_line)
         sys.exit(1)
     return _jump_relr(threshold, cmp_op, offset)
 
@@ -742,6 +758,7 @@ def i_jumps(offset, threshold, condition):
         return (skip_ins, jump_ins)
     else:
         log_sys.log_e("ulp_asm", "Invalid comparison condition: " + condition)
+        log_sys.log_i("ulp_asm", "Line: " + last_line)
         sys.exit(1)
     return _jump_rels(threshold, cmp_op, offset)
 
