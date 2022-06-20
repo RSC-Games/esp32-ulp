@@ -33,7 +33,7 @@ def make_binary(text, data, bss_size):
     
     # Log the binary size.
     log_sys.log_i("ulp_ld", ".text region size: " + str(len(text)) + " B")
-    log_sys.log_i("ulp_ld", ".data region size: " + str(len(text)) + " B")
+    log_sys.log_i("ulp_ld", ".data region size: " + str(len(data)) + " B")
     
     # Return the final image.
     return bytes(header) + text + data
