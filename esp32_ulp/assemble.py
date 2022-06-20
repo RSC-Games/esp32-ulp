@@ -133,7 +133,6 @@ class Assembler:
         opcode = opcode if opcode else None  # force empty strings to None
         args = tuple(arg.strip() for arg in args.split(',')) if args else ()
         lindex = current_line
-        print(current_line)
         
         # Update the current line index.
         current_line += 1
@@ -277,8 +276,10 @@ class Assembler:
         
         for label, opcode, args, lindex in self.parse(lines):
             # Set the debug line.
-            last_line = lines[lindex]
-            print(last_line)
+            try:
+                last_line = lines[lindex]
+            except IndexError:
+                last_line = "This line should not exist."
             
             self.symbols.set_from(self.section, self.offsets[self.section] // 4)
             if label is not None:
