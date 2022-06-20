@@ -7,11 +7,15 @@ import sys
 import log_sys
 from . import opcodes
 from .nocomment import remove_comments as do_remove_comments
-from .util import garbage_collect
+from .util import garbage_collect, last_line
 
 TEXT, DATA, BSS = 'text', 'data', 'bss'
 
 REL, ABS = 0, 1
+
+# This stores the current line index. Used for debugging
+# bad assembly code.
+current_line = 0
 
 
 class SymbolTable:
@@ -33,6 +37,7 @@ class SymbolTable:
         entry = (stype, section, value)
         if symbol in self._symbols and entry != self._symbols[symbol]:
             log_sys.log_e("ulp_asm", "Redefining symbol %s with different value %r -> %r." % (symbol, self._symbols[symbol], entry))
+            log_sys.log_i("ulp_asm", "Line: " + last_line)
             sys.exit(1)
         self._symbols[symbol] = entry
 
@@ -125,8 +130,12 @@ class Assembler:
         label = label if label else None  # force empty strings to None
         opcode = opcode if opcode else None  # force empty strings to None
         args = tuple(arg.strip() for arg in args.split(',')) if args else ()
+        lindex = current_line
+        
+        # Update the current line index.
+        current_line += 1
 
-        return label, opcode, args
+        return label, opcode, args, lindex
 
     def split_statements(self, lines):
         for line in lines:
@@ -142,10 +151,12 @@ class Assembler:
         s = self.section
         if expected_section is not None and s is not expected_section:
             log_sys.log_e("ulp_asm", "Only allowed in %s section" % expected_section)
+            log_sys.log_i("ulp_asm", "Line: " + last_line)
             sys.exit(1)
         if s is BSS:
             if int.from_bytes(value, 'little') != 0:
                 log_sys.log_e("ulp_asm", "Attempted to store non-zero value in section .bss")
+                log_sys.log_i("ulp_asm", "Line: " + last_line)
                 sys.exit(1)
             # just increase BSS size by length of value
             self.offsets[s] += len(value)
@@ -175,18 +186,20 @@ class Assembler:
         return bases
 
     def dump(self):
-        print("Symbols:")
+        log_sys.log_w("ump_asm", "Begin assembler dump.")
+        log_sys.log_i("ulp_asm", "Symbols:")
         self.symbols.dump()
-        print("%s section:" % TEXT)
+        log_sys.log_i("ulp_asm", "%s section:" % TEXT)
         for t in self.sections[TEXT]:
-            print("%08x" % int.from_bytes(t, 'little'))
-        print("size: %d" % self.offsets[TEXT])
-        print("%s section:" % DATA)
+            log_sys.log_i("ulp_asm", "%08x" % int.from_bytes(t, 'little'))
+        log_sys.log_i("ulp_asm", "size: %d" % self.offsets[TEXT])
+        log_sys.log_i("ulp_asm", "%s section:" % DATA)
         for d in self.sections[DATA]:
-            print("%08x" % int.from_bytes(d, 'little'))
-        print("size: %d" % self.offsets[DATA])
-        print("%s section:" % BSS)
-        print("size: %d" % self.offsets[BSS])
+            log_sys.log_i("ulp_asm", "%08x" % int.from_bytes(d, 'little'))
+        log_sys.log_i("ulp_asm", "size: %d" % self.offsets[DATA])
+        log_sys.log_i("ulp_asm", "%s section:" % BSS)
+        log_sys.log_i("ulp_asm", "size: %d" % self.offsets[BSS])
+        log_sys.log_w("ulp_asm", "End of dump.")
 
     def fetch(self):
         def get_bytes(section):
@@ -206,9 +219,11 @@ class Assembler:
     def fill(self, section, amount, fill_byte):
         if fill_byte is not None and section is BSS:
             log_sys.log_e("ulp_asm", "Fill in bss section not allowed.")
+            log_sys.log_i("ulp_asm", "Line: " + last_line)
             sys.exit(1)
         if section is TEXT:  # TODO: text section should be filled with NOPs
             log_sys.log_e("ulp_asm", "fill/skip/align in text section not supported.")
+            log_sys.log_i("ulp_asm", "Line: " + last_line)
             sys.exit(1)
         fill = int(fill_byte or 0).to_bytes(1, 'little') * amount
         self.offsets[section] += len(fill)
@@ -255,7 +270,12 @@ class Assembler:
         self.append_data(4, args)
 
     def assembler_pass(self, lines):
-        for label, opcode, args in self.parse(lines):
+        global last_line
+        
+        for label, opcode, args, lindex in self.parse(lines):
+            # Set the debug line.
+            last_line = lines[lindex]
+            
             self.symbols.set_from(self.section, self.offsets[self.section] // 4)
             if label is not None:
                 self.symbols.set_sym(label, REL, *self.symbols.get_from())
@@ -288,6 +308,7 @@ class Assembler:
                             self.append_section(instruction.to_bytes(4, 'little'), TEXT)
                         continue
                 log_sys.log_e("ulp_asm", "Unknown opcode or directive: %s" % opcode)
+                log_sys.log_i("ulp_asm", "Line: " + last_line)
                 sys.exit(1)
         self.finalize_sections()
 
